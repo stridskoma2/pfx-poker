@@ -9,6 +9,7 @@ import dearpygui.dearpygui as dpg
 from .models import Action
 from .scenario_generator import ScenarioEngine
 from .theme import CORRECT_COLOR, INCORRECT_COLOR, MUTED_TEXT_COLOR, create_app_theme, create_status_text_theme
+from .visuals import TableSceneRenderer
 
 
 WINDOW_TAG = "holdem_trainer.window"
@@ -22,6 +23,7 @@ SCORE_TAG = "holdem_trainer.score"
 PROGRESS_TAG = "holdem_trainer.progress"
 DIFFICULTY_TAG = "holdem_trainer.difficulty"
 QUESTION_TAG = "holdem_trainer.question"
+TABLE_STAGE_TAG = "holdem_trainer.table_stage"
 
 VIEWPORT_TITLE = "Texas Hold'em Trainer"
 VIEWPORT_WIDTH = 1360
@@ -91,6 +93,7 @@ class HoldemTrainerUi:
     def __init__(self, scenario_engine: ScenarioEngine) -> None:
         self._scenario_engine = scenario_engine
         self._session = QuizSession()
+        self._table_scene = TableSceneRenderer()
         self._app_theme_id: int | None = None
         self._correct_text_theme_id: int | None = None
         self._incorrect_text_theme_id: int | None = None
@@ -100,6 +103,7 @@ class HoldemTrainerUi:
         dpg.create_context()
         try:
             self._create_themes()
+            self._table_scene.register_assets()
             dpg.create_viewport(title=VIEWPORT_TITLE, width=VIEWPORT_WIDTH, height=VIEWPORT_HEIGHT)
             self._build_interface()
             self._load_next_scenario()
@@ -119,12 +123,20 @@ class HoldemTrainerUi:
     def _build_interface(self) -> None:
         with dpg.window(tag=WINDOW_TAG, label=VIEWPORT_TITLE):
             with dpg.group(horizontal=True):
-                with dpg.child_window(width=760, autosize_y=True, border=False):
+                with dpg.child_window(width=820, autosize_y=True, border=False):
                     dpg.add_text("Spot")
                     dpg.add_separator()
                     dpg.add_text("", tag=QUESTION_TAG)
                     dpg.add_spacer(height=4)
-                    dpg.add_text("", tag=SCENARIO_TEXT_TAG, wrap=720)
+                    with dpg.child_window(
+                        width=780,
+                        height=460,
+                        border=False,
+                        tag=TABLE_STAGE_TAG,
+                    ):
+                        self._table_scene.build(TABLE_STAGE_TAG)
+                    dpg.add_spacer(height=10)
+                    dpg.add_text("", tag=SCENARIO_TEXT_TAG, wrap=760)
                     dpg.add_spacer(height=12)
                     dpg.add_text("Choose the best action")
                     dpg.add_radio_button(
@@ -171,6 +183,7 @@ class HoldemTrainerUi:
         dpg.set_value(ANSWER_TAG, "")
         dpg.set_value(QUESTION_TAG, f"Question {self._session.question_number}")
         dpg.set_value(SCENARIO_TEXT_TAG, self._format_scenario(scenario))
+        self._table_scene.render(scenario)
         dpg.set_value(RESULT_TAG, "Submit your answer to reveal the evaluation.")
         dpg.set_value(EXPLANATION_TAG, DEFAULT_EXPLANATION)
         dpg.set_value(DIFFICULTY_TAG, self._difficulty_text(analysis))
@@ -266,13 +279,13 @@ class HoldemTrainerUi:
     def _format_scenario(self, scenario: Any) -> str:
         lines = [
             self._format_line("Street", self._label_from_mapping(STREET_LABELS, getattr(scenario, "street", None))),
-            self._format_line("Hero Hand", self._format_cards(getattr(scenario, "hero_hand", ()))),
-            self._format_line("Board", self._format_cards(getattr(scenario, "board", ()))),
             self._format_line("Table", self._table_text(scenario)),
             self._format_line("Position", self._label_from_mapping(POSITION_LABELS, getattr(scenario, "position", None))),
             self._format_line("Pot Size", self._format_amount(getattr(scenario, "pot_size", None))),
             self._format_line("Facing Bet", self._format_amount(getattr(scenario, "facing_bet", None))),
             self._format_line("Effective Stack", self._format_amount(getattr(scenario, "effective_stack", None))),
+            self._format_line("Hero Hand", self._format_cards(getattr(scenario, "hero_hand", ()))),
+            self._format_line("Board", self._format_cards(getattr(scenario, "board", ()))),
             self._format_line("Tags", self._format_tags(getattr(scenario, "seed_tags", ()))),
         ]
         return "\n".join(lines)
